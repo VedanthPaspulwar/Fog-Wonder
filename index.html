@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Window Seat Stories</title>
+  <style>
+    :root {
+      --bg: #f2f5f8;
+      --card: #fff;
+      --ink: #17202a;
+      --mut: #5f6b78;
+      --acc: #2a6fb0;
+      --line: #d5dde6;
+      box-sizing: border-box;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px)
+    }
+
+    @media (prefers-color-scheme:dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #10161d;
+        --card: #18212b;
+        --ink: #eaf0f6;
+        --mut: #9fb0c1;
+        --acc: #7db8f0;
+        --line: #2c3947
+      }
+    }
+
+    :root[data-theme="dark"] {
+      --bg: #10161d;
+      --card: #18212b;
+      --ink: #eaf0f6;
+      --mut: #9fb0c1;
+      --acc: #7db8f0;
+      --line: #2c3947
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    html {
+      scroll-padding-top: env(safe-area-inset-top, 0px)
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.5
+    }
+
+    main {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 20px 16px 40px
+    }
+
+    h1 {
+      font-size: 1.9rem;
+      margin: .2em 0 0;
+      letter-spacing: -.5px
+    }
+
+    .sub {
+      color: var(--acc);
+      margin: 0 0 10px
+    }
+
+    .note {
+      font-size: .85rem;
+      color: var(--mut)
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 16px;
+      border: 2px solid var(--line);
+      touch-action: none;
+      margin: 12px 0 8px;
+      cursor: crosshair
+    }
+
+    .cap {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 14px;
+      min-height: 3em
+    }
+
+    button {
+      background: transparent;
+      color: var(--acc);
+      border: 1px solid var(--acc);
+      border-radius: 20px;
+      padding: 6px 13px;
+      font-size: .85rem;
+      cursor: pointer;
+      margin: 6px 6px 0 0
+    }
+
+    button.sel {
+      background: var(--acc);
+      color: #fff
+    }
+
+    @media (prefers-color-scheme:dark) {
+      button.sel {
+        color: #08121c
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <h1>Window Seat Stories</h1>
+    <p class="sub">Khidki ke shishe par likho. Bahar ki duniya jawab degi.</p>
+    <canvas id="c" width="800" height="500"></canvas>
+    <div class="cap" id="cap">Shishe par ungli se kuch draw karo...</div>
+    <div id="chips">
+      <button data-m="auto" class="sel">Auto pehchano</button>
+      <button data-m="surya">Suraj</button><button data-m="ped">Ped + chidiya</button><button data-m="chidiya">Udti
+        chidiyaan</button><button data-m="baarish">Baarish + bacche</button>
+      <button id="cam">Live camera</button><button id="upl">Meri photo/video</button><button id="scn">Cartoon
+        scene</button><input type="file" id="file" accept="image/*,video/*" hidden>
+      <button id="mute">Awaaz: ON</button>
+    </div>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    const cv = $("c"), x = cv.getContext("2d"), W = 800, H = 500;
+    const fog = document.createElement("canvas"); fog.width = W; fog.height = H; const f = fog.getContext("2d");
+    let scroll = 0, items = [], birds = [], sunT = -1, rainT = 0, strokes = [], cur = null, mode = "auto", ac, voice = true, frameN = 0, story = 0, noiseG, rainG;
+    let bg = "scene", bgEl = null, sunX = 600, sunY = 110, stream = null;
+    const hh = i => { const s = Math.sin(i * 127.1) * 43758.5453; return s - Math.floor(s) };
+    const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+    function audio() {
+      if (ac) { if (ac.state === "suspended") ac.resume(); return }
+      try {
+        ac = new (window.AudioContext || window.webkitAudioContext)();
+        const len = ac.sampleRate * 2, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0); let b = 0; for (let i = 0; i < len; i++) { b = .96 * b + .04 * (Math.random() * 2 - 1); d[i] = b * 5 }
+        const mk = (type, fr, gain) => { const s = ac.createBufferSource(); s.buffer = buf; s.loop = true; const fl = ac.createBiquadFilter(); fl.type = type; fl.frequency.value = fr; const g = ac.createGain(); g.gain.value = gain; s.connect(fl); fl.connect(g); g.connect(ac.destination); s.start(); return g };
+        noiseG = mk("lowpass", 140, .35); rainG = mk("highpass", 2500, 0);
+      } catch (e) { }
+    }
+    function tone(fr, t0, d, v, f2) { if (!ac || !voice) return; const t = ac.currentTime + t0, o = ac.createOscillator(), g = ac.createGain(); o.type = "sine"; o.frequency.setValueAtTime(fr, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + d); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.001, t + d); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + d + .02) }
+    const chirp = () => { tone(2400, 0, .08, .08, 3200); tone(2900, .12, .08, .08, 3700); tone(2500, .26, .1, .08, 3300) };
+    function pos(e) { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height, t: performance.now() } }
+    cv.addEventListener("pointerdown", e => { audio(); cv.setPointerCapture(e.pointerId); cur = { pts: [pos(e)], t0: performance.now() }; strokes.push(cur) });
+    cv.addEventListener("pointermove", e => { if (cur) cur.pts.push(pos(e)) });
+    function end() {
+      if (!cur) return; const k = classify(cur.pts), p = cur.pts; cur = null; const m = mode === "auto" ? k : mode; if (!m) { $("cap").textContent = "Thoda lamba draw karo, taaki khidki samjhe."; return }
+      const cx = p.reduce((s, q) => s + q.x, 0) / p.length; const by = Math.max(...p.map(q => q.y)), cy = p.reduce((a, q) => a + q.y, 0) / p.length; spawn(m, cx, by, cy)
+    }
+    cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+    function classify(p) {
+      let a = 1e9, b = -1e9, c = 1e9, d = -1e9, len = 0;
+      p.forEach((q, i) => { a = Math.min(a, q.x); b = Math.max(b, q.x); c = Math.min(c, q.y); d = Math.max(d, q.y); if (i) len += Math.hypot(q.x - p[i - 1].x, q.y - p[i - 1].y) });
+      const w = b - a, h = d - c, sz = Math.max(w, h); if (len < 60) return null;
+      if (Math.hypot(p[0].x - p[p.length - 1].x, p[0].y - p[p.length - 1].y) < sz * .3 && w > 25 && h > 25) return "surya";
+      let turns = 0, last = 0; for (let i = 3; i < p.length; i++) { const dy = p[i].y - p[i - 3].y, s = Math.abs(dy) < 2 ? 0 : Math.sign(dy); if (s && last && s !== last) turns++; if (s) last = s }
+      if (h > w * 1.3) return "ped"; if (turns >= 3 && w > h) return "chidiya"; return "baarish";
+    }
+    const MSG = { surya: "Suraj nikal aaya! Khidki garam ho gayi.", ped: "Ek ped ugaa, aur uspar ek chidiya aa baithi.", chidiya: "Chidiyon ka jhund tumhare saath udne laga.", baarish: "Baarish shuru! Dekho, bacche gadhdhon mein kood rahe hain." };
+    function spawn(m, sx, by, cy) {
+      story++; $("cap").textContent = MSG[m] + " (kahaniyaan: " + story + ")";
+      const wx = sx + scroll * .8;
+      if (m === "surya") { sunT = 0; if (bg === "scene") { sunX = 600; sunY = 110 } else { sunX = sx; sunY = cy } tone(520, 0, .5, .08, 880) }
+      if (m === "ped") { items.push({ k: "tree", wx, age: 0, gy: bg === "scene" ? 410 : Math.max(200, Math.min(480, by)) }); setTimeout(chirp, 1300) }
+      if (m === "chidiya") { for (let i = 0; i < 4; i++)birds.push({ x: sx - 60 - i * 40, y: 90 + i * 28 + Math.random() * 30, ph: Math.random() * 6, life: 0 }); chirp() }
+      if (m === "baarish") { rainT = 12; items.push({ k: "kids", wx, age: 0, gy: bg === "scene" ? 410 : Math.max(200, Math.min(480, by)) }); tone(300, 0, .4, .05) }
+    }
+    function sunDraw() { if (sunT < 0) return; const e = Math.min(1, sunT / 3), a = sunT > 20 ? Math.max(0, (25 - sunT) / 5) : 1, sy = sunY + (1 - e) * 270; x.globalAlpha = a; const r = x.createRadialGradient(sunX, sy, 10, sunX, sy, 130); r.addColorStop(0, "rgba(255,240,170,.9)"); r.addColorStop(1, "rgba(255,240,170,0)"); x.fillStyle = r; x.fillRect(sunX - 160, sy - 140, 320, 280); x.fillStyle = "#ffd54a"; x.beginPath(); x.arc(sunX, sy, 34, 0, 7); x.fill(); x.globalAlpha = 1 }
+    function realBg() {
+      x.fillStyle = "#111"; x.fillRect(0, 0, W, H);
+      if (bgEl) { const sw = bgEl.videoWidth || bgEl.naturalWidth, sh = bgEl.videoHeight || bgEl.naturalHeight; if (sw && sh) { const k = Math.max(W / sw, H / sh), dw = sw * k, dh = sh * k; x.drawImage(bgEl, (W - dw) / 2, (H - dh) / 2, dw, dh) } }
+      const warm = sunT >= 0 ? Math.min(1, sunT / 3) : 0; if (warm) { x.fillStyle = "rgba(255,190,100," + (.2 * warm) + ")"; x.fillRect(0, 0, W, H) }
+      if (rainT > 0) { x.fillStyle = "rgba(10,20,50,.3)"; x.fillRect(0, 0, W, H) }
+      sunDraw();
+    }
+    function stopCam() { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null } }
+    function setBg(m, el) { bg = m; bgEl = el; items = []; birds = [] }
+    function scenery() {
+      const warm = sunT >= 0 ? Math.min(1, sunT / 3) : 0, dark = rainT > 0 ? .35 : 0;
+      let top = mix([105, 165, 220], [250, 200, 130], warm * .5), bot = mix([185, 220, 240], [255, 225, 170], warm * .5);
+      top = top.map(v => Math.round(v * (1 - dark))); bot = bot.map(v => Math.round(v * (1 - dark)));
+      const g = x.createLinearGradient(0, 0, 0, 400); g.addColorStop(0, `rgb(${top})`); g.addColorStop(1, `rgb(${bot})`); x.fillStyle = g; x.fillRect(0, 0, W, H);
+      sunDraw();
+      x.fillStyle = "#6a9a6e"; x.beginPath(); x.moveTo(0, H); for (let s = 0; s <= W; s += 20)x.lineTo(s, 330 + 28 * Math.sin((s + scroll * .2) / 90) + 14 * Math.sin((s + scroll * .2) / 37)); x.lineTo(W, H); x.fill();
+      x.fillStyle = "#4f8a56"; x.fillRect(0, 400, W, H);
+      const p = .5; for (let i = Math.floor(scroll * p / 190) - 1; i < Math.floor(scroll * p / 190) + 6; i++) { const sx = i * 190 - scroll * p + hh(i) * 40, w = 60 + hh(i + 3) * 40, hgt = 50 + hh(i + 7) * 40; x.fillStyle = ["#d98f5a", "#e4b36b", "#c9776a", "#a9b9c7"][Math.floor(hh(i + 1) * 4)]; x.fillRect(sx, 400 - hgt, w, hgt); x.fillStyle = "#7b4b3a"; x.beginPath(); x.moveTo(sx - 6, 400 - hgt); x.lineTo(sx + w / 2, 400 - hgt - 22); x.lineTo(sx + w + 6, 400 - hgt); x.fill(); x.fillStyle = "#fff3b0"; x.fillRect(sx + w / 2 - 6, 400 - hgt + 14, 12, 14) }
+      const q = 1; x.strokeStyle = "#2c2c2c"; x.lineWidth = 2; let px = null; for (let i = Math.floor(scroll * q / 260) - 1; i < Math.floor(scroll * q / 260) + 5; i++) { const sx = i * 260 - scroll * q; x.fillStyle = "#3a3a3a"; x.fillRect(sx, 170, 6, 260); x.fillRect(sx - 14, 190, 34, 4); if (px !== null) { x.beginPath(); x.moveTo(px + 3, 192); x.quadraticCurveTo((px + sx) / 2, 230, sx + 3, 192); x.stroke() } px = sx }
+      x.fillStyle = "#6b5a45"; x.fillRect(0, 440, W, H); x.fillStyle = "#4a3d2e"; for (let s = -((scroll * 1.8) % 60); s < W; s += 60)x.fillRect(s, 446, 26, 54);
+    }
+    function drawItems() {
+      items.forEach(it => {
+        it.age += 1 / 60; const sx = it.wx - scroll * .8; x.save(); x.translate(0, (it.gy || 410) - 410);
+        if (it.k === "tree") {
+          const g = Math.min(1, it.age / 1.2); x.fillStyle = "#6b4423"; x.fillRect(sx - 6, 410 - 80 * g, 12, 80 * g); x.fillStyle = "#2f8a43";[[0, -92, 36], [-22, -72, 28], [22, -72, 28]].forEach(c => { x.beginPath(); x.arc(sx + c[0] * g, 410 + c[1] * g, c[2] * g, 0, 7); x.fill() });
+          if (it.age > 1.2) { const fl = Math.sin(it.age * 14) * 5; x.fillStyle = "#e2572f"; x.beginPath(); x.ellipse(sx + 14, 410 - 124, 9, 6, 0, 0, 7); x.fill(); x.beginPath(); x.moveTo(sx + 14, 410 - 124); x.lineTo(sx + 8, 410 - 124 - fl - 6); x.lineTo(sx + 20, 410 - 124); x.fill(); x.fillStyle = "#ffc83d"; x.beginPath(); x.moveTo(sx + 22, 410 - 125); x.lineTo(sx + 28, 410 - 123); x.lineTo(sx + 22, 410 - 121); x.fill() }
+        }
+        if (it.k === "kids") { x.fillStyle = "rgba(90,150,210,.8)"; x.beginPath(); x.ellipse(sx, 418, 60, 9, 0, 0, 7); x.fill();[-20, 20].forEach((o, j) => { const jy = -Math.abs(Math.sin(it.age * 5 + j * 1.6)) * 22; x.fillStyle = j ? "#3f7fe0" : "#e0573f"; x.fillRect(sx + o - 7, 396 + jy, 14, 22); x.fillStyle = "#5a3a22"; x.beginPath(); x.arc(sx + o, 390 + jy, 8, 0, 7); x.fill() }) }
+        x.restore();
+      });
+      items = items.filter(i => i.wx - scroll * .8 > -120);
+      x.strokeStyle = "#222"; x.lineWidth = 2.5; x.lineCap = "round";
+      birds.forEach(b => { b.life += 1 / 60; b.x += 2.4; b.ph += .3; b.y += Math.sin(b.life * 3) * .4; const s = Math.sin(b.ph) * 7; x.beginPath(); x.moveTo(b.x - 11, b.y - s); x.quadraticCurveTo(b.x, b.y + 4, b.x + 11, b.y - s); x.stroke() }); birds = birds.filter(b => b.x < W + 40);
+      if (rainT > 0) { rainT -= 1 / 60; x.strokeStyle = "rgba(230,240,255,.7)"; x.lineWidth = 1.4; for (let i = 0; i < 140; i++) { const y = (hh(i + 9) * H + frameN * (9 + hh(i) * 5)) % H, xx = (hh(i) * W - y * .15 + W) % W; x.beginPath(); x.moveTo(xx, y); x.lineTo(xx - 2, y + 14); x.stroke() } }
+      if (rainG) rainG.gain.value = (voice && rainT > 0) ? .09 : 0;
+    }
+    function glassLayer() {
+      f.globalCompositeOperation = "source-over"; f.clearRect(0, 0, W, H); f.fillStyle = "rgba(222,234,242,.5)"; f.fillRect(0, 0, W, H);
+      f.globalCompositeOperation = "destination-out"; f.lineCap = "round"; f.lineJoin = "round"; f.lineWidth = 15;
+      const now = performance.now(); strokes = strokes.filter(s => now - s.t0 < 9000);
+      strokes.forEach(s => { f.globalAlpha = Math.max(0, 1 - (now - s.t0) / 9000); f.beginPath(); s.pts.forEach((q, i) => i ? f.lineTo(q.x, q.y) : f.moveTo(q.x, q.y)); if (s.pts.length === 1) f.lineTo(s.pts[0].x + .1, s.pts[0].y); f.stroke() });
+      f.globalAlpha = 1; f.globalCompositeOperation = "source-over";
+      x.drawImage(fog, 0, 0);
+      x.strokeStyle = "rgba(255,255,255,.65)"; x.lineWidth = 2; x.lineCap = "round"; x.lineJoin = "round";
+      strokes.forEach(s => { x.globalAlpha = Math.max(0, .9 - (now - s.t0) / 3500); if (x.globalAlpha > 0) { x.beginPath(); s.pts.forEach((q, i) => i ? x.lineTo(q.x, q.y) : x.moveTo(q.x, q.y)); x.stroke() } }); x.globalAlpha = 1;
+    }
+    function frame() {
+      frameN++; if (bg === "scene") scroll += 2.2; if (sunT >= 0) { sunT += 1 / 60; if (sunT > 25) sunT = -1 }
+      if (bg === "scene") scenery(); else realBg(); drawItems(); glassLayer();
+      x.fillStyle = "#2b2f36"; x.beginPath(); x.rect(0, 0, W, H); x.rect(26, 26, W - 52, H - 86); x.fill("evenodd");
+      x.fillStyle = "#3b4049"; x.fillRect(0, H - 60, W, 60); x.fillStyle = "#555b66"; x.fillRect(0, H - 62, W, 4);
+      if (noiseG) noiseG.gain.value = (voice ? .3 : 0) * (.8 + .2 * Math.sin(frameN / 9));
+      requestAnimationFrame(frame);
+    }
+    document.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { mode = b.dataset.m; document.querySelectorAll("[data-m]").forEach(o => o.classList.toggle("sel", o === b)) });
+    $("mute").onclick = () => { voice = !voice; $("mute").textContent = "Awaaz: " + (voice ? "ON" : "OFF"); if (rainG) rainG.gain.value = 0 };
+    $("cam").onclick = async () => { audio(); try { const st = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }); stopCam(); stream = st; const v = document.createElement("video"); v.muted = true; v.playsInline = true; v.srcObject = st; await v.play(); setBg("live", v); $("cap").textContent = "Live camera chalu! Ab shishe par draw karo." } catch (e) { $("cap").textContent = "Camera yahan allow nahi hua. 'Meri photo/video' se apni khidki ki photo ya video daalo." } };
+    $("upl").onclick = () => $("file").click();
+    $("file").onchange = e => { const fl = e.target.files[0]; if (!fl) return; stopCam(); const u = URL.createObjectURL(fl); if (fl.type.startsWith("video")) { const v = document.createElement("video"); v.src = u; v.muted = true; v.loop = true; v.playsInline = true; v.play().catch(() => { }); setBg("photo", v) } else { const im = new Image(); im.onload = () => setBg("photo", im); im.src = u } $("cap").textContent = "Aapki khidki ki photo laga di. Ab shishe par draw karo." };
+    $("scn").onclick = () => { stopCam(); setBg("scene", null); $("cap").textContent = "Cartoon scene wapas." };
+    frame();
+  </script>
+</body>
+
+</html>
